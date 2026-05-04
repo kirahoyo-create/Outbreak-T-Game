@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Outbreak City - 3D Run</title>
+    <title>Hospital Escape 3D</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; }
-        #score { font-size: 30px; font-weight: bold; text-shadow: 2px 2px #ff0055; }
-        #instructions { font-size: 14px; opacity: 0.8; }
+        #score { font-size: 30px; font-weight: bold; color: #00fbff; }
+        #shield-status { font-size: 18px; color: #00ff00; margin-top: 5px; display: none; }
         canvas { display: block; }
     </style>
 </head>
@@ -17,68 +17,82 @@
 
 <div id="ui">
     <div id="score">SCORE: 0</div>
-    <div id="instructions">المس يمين أو يسار لتتحرك</div>
+    <div id="shield-status">🛡️ الدرع مُفعل!</div>
 </div>
 
 <script>
 let scene, camera, renderer, player, clock;
-let obstacles = [], masks = [];
-let score = 0, speed = 0.5, isGameOver = false;
-let playerLane = 0; // -1: يسار, 0: منتصف, 1: يمين
+let obstacles = [], boosts = [];
+let score = 0, speed = 0.6, isGameOver = false, hasShield = false;
+let playerLane = 0; 
 
 init();
 animate();
 
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020205);
-    scene.fog = new THREE.Fog(0x020205, 10, 50);
+    scene.background = new THREE.Color(0x111111);
+    scene.fog = new THREE.Fog(0x111111, 10, 60);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 3, 8);
-    camera.lookAt(0, 0, -5);
+    camera.position.set(0, 3, 10);
+    camera.lookAt(0, 1, 0);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // الإضاءة
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
-    const light = new THREE.DirectionalLight(0x00fbff, 0.8);
-    light.position.set(0, 5, 5);
+    const light = new THREE.PointLight(0x00fbff, 1);
+    light.position.set(0, 10, 5);
     scene.add(light);
 
-    // الطريق (المدينة)
-    const roadGeo = new THREE.PlaneGeometry(10, 1000);
-    const roadMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
-    const road = new THREE.Mesh(roadGeo, roadMat);
-    road.rotation.x = -Math.PI / 2;
-    scene.add(road);
+    // أرضية المستشفى (بلاط)
+    const floorGeo = new THREE.PlaneGeometry(12, 1000);
+    const floorMat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
 
-    // خطوط الطريق
-    const grid = new THREE.GridHelper(10, 20, 0x00fbff, 0x222222);
-    grid.position.y = 0.05;
-    scene.add(grid);
+    // جدران المستشفى
+    const wallGeo = new THREE.BoxGeometry(1, 10, 1000);
+    const wallMat = new THREE.MeshPhongMaterial({ color: 0x99aabb });
+    const wallL = new THREE.Mesh(wallGeo, wallMat); wallL.position.x = -6.5; scene.add(wallL);
+    const wallR = new THREE.Mesh(wallGeo, wallMat); wallR.position.x = 6.5; scene.add(wallR);
 
-    // اللاعب (على شكل إنسان مبسط)
+    // صناعة شكل "الإنسان"
     player = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, 0.4), new THREE.MeshPhongMaterial({ color: 0x00fbff }));
-    body.position.y = 1;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshPhongMaterial({ color: 0xffdbac }));
-    head.position.y = 1.7;
-    player.add(body, head);
+    const clothesMat = new THREE.MeshPhongMaterial({ color: 0x333333 }); // ملابس
+    const skinMat = new THREE.MeshPhongMaterial({ color: 0xffdbac });   // جلد
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1, 0.4), clothesMat);
+    torso.position.y = 1.2;
+    
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skinMat);
+    head.position.y = 1.9;
+
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), clothesMat);
+    legL.position.set(-0.2, 0.4, 0);
+    
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), clothesMat);
+    legR.position.set(0.2, 0.4, 0);
+
+    player.add(torso, head, legL, legR);
     scene.add(player);
 
-    clock = new THREE.Clock();
+    // نظام الدرع (هالة حول اللاعب)
+    const shieldGeo = new THREE.SphereGeometry(1.5, 16, 16);
+    const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.3, wireframe: true });
+    player.shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
+    player.shieldMesh.visible = false;
+    player.add(player.shieldMesh);
 
     // التحكم
     window.addEventListener('touchstart', (e) => {
         const x = e.touches[0].clientX;
-        if (x < window.innerWidth / 2) movePlayer(-1);
-        else movePlayer(1);
+        if (x < window.innerWidth/2) movePlayer(-1); else movePlayer(1);
     });
-
     window.addEventListener('keydown', (e) => {
         if (e.key === "ArrowLeft") movePlayer(-1);
         if (e.key === "ArrowRight") movePlayer(1);
@@ -89,17 +103,16 @@ function movePlayer(dir) {
     playerLane = Math.max(-1, Math.min(1, playerLane + dir));
 }
 
-function spawnObstacle() {
-    if (Math.random() > 0.96) {
-        // بكتيريا أو عائق
-        const isMask = Math.random() > 0.8;
-        const geo = isMask ? new THREE.TorusGeometry(0.3, 0.1) : new THREE.SphereGeometry(0.5, 16, 16);
-        const mat = new THREE.MeshPhongMaterial({ color: isMask ? 0x00ff00 : 0xff0055 });
-        const obj = new THREE.Mesh(geo, mat);
+function spawnEntities() {
+    if (Math.random() > 0.95) {
+        const isBoost = Math.random() > 0.85;
+        const geometry = isBoost ? new THREE.BoxGeometry(0.6, 0.4, 0.1) : new THREE.SphereGeometry(0.6, 12, 12);
+        const material = new THREE.MeshPhongMaterial({ color: isBoost ? 0x00ff00 : 0xff0000 });
+        const entity = new THREE.Mesh(geometry, material);
         
-        obj.position.set([-3, 0, 3][Math.floor(Math.random() * 3)], 0.5, -50);
-        scene.add(obj);
-        if (isMask) masks.push(obj); else obstacles.push(obj);
+        entity.position.set([-3.5, 0, 3.5][Math.floor(Math.random() * 3)], 0.6, -60);
+        scene.add(entity);
+        if (isBoost) boosts.push(entity); else obstacles.push(entity);
     }
 }
 
@@ -107,38 +120,43 @@ function animate() {
     if (isGameOver) return;
     requestAnimationFrame(animate);
 
-    // تحريك اللاعب بسلاسة بين المسارات
-    player.position.x = THREE.MathUtils.lerp(player.position.x, playerLane * 3, 0.1);
+    player.position.x = THREE.MathUtils.lerp(player.position.x, playerLane * 3.5, 0.15);
+    spawnEntities();
 
-    spawnObstacle();
-
-    // تحريك العوائق (تأتي من الأمام)
+    // حركة العوائق (البكتيريا الحمراء)
     obstacles.forEach((o, i) => {
         o.position.z += speed;
-        o.rotation.y += 0.05;
-        
-        // تصادم
-        if (o.position.z > 7.5 && o.position.z < 8.5 && Math.abs(o.position.x - player.position.x) < 1) {
-            endGame("أصابتك البكتيريا!");
+        if (o.position.z > 8.5 && o.position.z < 11 && Math.abs(o.position.x - player.position.x) < 1.2) {
+            if (hasShield) {
+                hasShield = false;
+                player.shieldMesh.visible = false;
+                document.getElementById("shield-status").style.display = "none";
+                scene.remove(o);
+                obstacles.splice(i, 1);
+            } else {
+                endGame("أصابتك العدوى!");
+            }
         }
-        if (o.position.z > 10) { scene.remove(o); obstacles.splice(i, 1); }
+        if (o.position.z > 15) { scene.remove(o); obstacles.splice(i, 1); }
     });
 
-    // تحريك الكمامات (الأقنعة)
-    masks.forEach((m, i) => {
-        m.position.z += speed;
-        m.rotation.z += 0.1;
-        if (m.position.z > 7.5 && m.position.z < 8.5 && Math.abs(m.position.x - player.position.x) < 1) {
-            score += 100;
-            scene.remove(m);
-            masks.splice(i, 1);
+    // حركة بوست الكمامات (الأخضر)
+    boosts.forEach((b, i) => {
+        b.position.z += speed;
+        b.rotation.y += 0.1;
+        if (b.position.z > 8.5 && b.position.z < 11 && Math.abs(b.position.x - player.position.x) < 1.2) {
+            hasShield = true;
+            player.shieldMesh.visible = true;
+            document.getElementById("shield-status").style.display = "block";
+            scene.remove(b);
+            boosts.splice(i, 1);
         }
+        if (b.position.z > 15) { scene.remove(b); boosts.splice(i, 1); }
     });
 
     score++;
-    speed += 0.0001;
+    speed += 0.0002;
     document.getElementById("score").innerText = "SCORE: " + score;
-
     renderer.render(scene, camera);
 }
 
