@@ -1,150 +1,152 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Outbreak Run - البكتيريا</title>
-<style>
-  body { margin: 0; overflow: hidden; background: #0a0a0a; font-family: sans-serif; touch-action: manipulation; }
-  #game { position: relative; width: 100vw; height: 100vh; background: linear-gradient(to bottom, #120422, #000); border-bottom: 60px solid #222; overflow: hidden; }
-  
-  /* اللاعب - الشخصية الهاربة */
-  .player { 
-    width: 40px; height: 40px; background: #00fbff; position: absolute; bottom: 60px; left: 100px; 
-    border-radius: 8px; box-shadow: 0 0 15px #00fbff; z-index: 10; transition: transform 0.1s;
-  }
-
-  /* الوحش - البكتيريا */
-  .enemy { 
-    width: 60px; height: 60px; background: #ff0055; position: absolute; bottom: 60px; left: -100px; 
-    border-radius: 50%; box-shadow: 0 0 20px #ff0055; z-index: 11;
-    background-image: radial-gradient(circle, #ff0055 20%, #880022 80%);
-  }
-  .enemy::after { content: "🦠"; position: absolute; top: 10px; left: 10px; font-size: 30px; }
-
-  /* العوائق - فيروسات */
-  .obstacle { 
-    width: 35px; height: 35px; background: #ffaa00; position: absolute; bottom: 60px; 
-    border-radius: 5px; box-shadow: 0 0 10px #ffaa00; 
-  }
-  .obstacle::before { content: "⚠️"; position: absolute; top: 5px; left: 5px; font-size: 20px; }
-
-  /* الأقنعة - مكافآت */
-  .mask { 
-    width: 30px; height: 30px; background: #00ff00; position: absolute; bottom: 120px; 
-    border-radius: 50%; box-shadow: 0 0 15px #00ff00; 
-  }
-  .mask::before { content: "😷"; position: absolute; top: 3px; left: 3px; font-size: 20px; }
-
-  #score { position: absolute; top: 40px; left: 20px; color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px #000; }
-  .ground-line { position: absolute; bottom: 55px; width: 100%; height: 5px; background: #00fbff; opacity: 0.3; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Outbreak City - 3D Run</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; pointer-events: none; }
+        #score { font-size: 30px; font-weight: bold; text-shadow: 2px 2px #ff0055; }
+        #instructions { font-size: 14px; opacity: 0.8; }
+        canvas { display: block; }
+    </style>
 </head>
 <body>
 
-<div id="game">
-  <div id="score">SCORE: 0</div>
-  <div class="ground-line"></div>
-  <div class="player" id="player"></div>
-  <div class="enemy" id="enemy"></div>
+<div id="ui">
+    <div id="score">SCORE: 0</div>
+    <div id="instructions">المس يمين أو يسار لتتحرك</div>
 </div>
 
 <script>
-const player = document.getElementById("player");
-const enemy = document.getElementById("enemy");
-const scoreText = document.getElementById("score");
-const game = document.getElementById("game");
-
-let y = 0, velocity = 0, gravity = -0.7, jump = 15;
-let score = 0, speed = 6, enemyX = -100;
+let scene, camera, renderer, player, clock;
 let obstacles = [], masks = [];
-let isGameOver = false;
+let score = 0, speed = 0.5, isGameOver = false;
+let playerLane = 0; // -1: يسار, 0: منتصف, 1: يمين
 
-// القفز (لمس الشاشة للجوال)
-document.addEventListener("touchstart", () => { if (y === 0) velocity = jump; });
-document.addEventListener("keydown", (e) => { if (e.code === "Space" && y === 0) velocity = jump; });
+init();
+animate();
 
-function spawn() {
-  if (isGameOver) return;
-  // إنشاء عائق
-  if (Math.random() > 0.98) {
-    let o = document.createElement("div");
-    o.className = "obstacle";
-    o.style.left = "100vw";
-    game.appendChild(o);
-    obstacles.push(o);
-  }
-  // إنشاء قناع
-  if (Math.random() > 0.995) {
-    let m = document.createElement("div");
-    m.className = "mask";
-    m.style.left = "100vw";
-    m.style.bottom = (100 + Math.random() * 100) + "px";
-    game.appendChild(m);
-    masks.push(m);
-  }
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020205);
+    scene.fog = new THREE.Fog(0x020205, 10, 50);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 3, 8);
+    camera.lookAt(0, 0, -5);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // الإضاءة
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+    const light = new THREE.DirectionalLight(0x00fbff, 0.8);
+    light.position.set(0, 5, 5);
+    scene.add(light);
+
+    // الطريق (المدينة)
+    const roadGeo = new THREE.PlaneGeometry(10, 1000);
+    const roadMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+    const road = new THREE.Mesh(roadGeo, roadMat);
+    road.rotation.x = -Math.PI / 2;
+    scene.add(road);
+
+    // خطوط الطريق
+    const grid = new THREE.GridHelper(10, 20, 0x00fbff, 0x222222);
+    grid.position.y = 0.05;
+    scene.add(grid);
+
+    // اللاعب (على شكل إنسان مبسط)
+    player = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, 0.4), new THREE.MeshPhongMaterial({ color: 0x00fbff }));
+    body.position.y = 1;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshPhongMaterial({ color: 0xffdbac }));
+    head.position.y = 1.7;
+    player.add(body, head);
+    scene.add(player);
+
+    clock = new THREE.Clock();
+
+    // التحكم
+    window.addEventListener('touchstart', (e) => {
+        const x = e.touches[0].clientX;
+        if (x < window.innerWidth / 2) movePlayer(-1);
+        else movePlayer(1);
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === "ArrowLeft") movePlayer(-1);
+        if (e.key === "ArrowRight") movePlayer(1);
+    });
 }
 
-function update() {
-  if (isGameOver) return;
+function movePlayer(dir) {
+    playerLane = Math.max(-1, Math.min(1, playerLane + dir));
+}
 
-  // الجاذبية والقفز
-  velocity += gravity;
-  y += velocity;
-  if (y < 0) { y = 0; velocity = 0; }
-  player.style.bottom = (60 + y) + "px";
-  player.style.transform = `rotate(${y * -2}deg)`;
-
-  // تحريك العوائق (الباركور)
-  obstacles.forEach((o, i) => {
-    let x = parseFloat(o.style.left) - speed;
-    o.style.left = x + "vw";
-    
-    // تصادم مع العائق
-    if (x < 30 && x > 20 && y < 35) {
-      endGame("اصطدمت بالفيروس!");
+function spawnObstacle() {
+    if (Math.random() > 0.96) {
+        // بكتيريا أو عائق
+        const isMask = Math.random() > 0.8;
+        const geo = isMask ? new THREE.TorusGeometry(0.3, 0.1) : new THREE.SphereGeometry(0.5, 16, 16);
+        const mat = new THREE.MeshPhongMaterial({ color: isMask ? 0x00ff00 : 0xff0055 });
+        const obj = new THREE.Mesh(geo, mat);
+        
+        obj.position.set([-3, 0, 3][Math.floor(Math.random() * 3)], 0.5, -50);
+        scene.add(obj);
+        if (isMask) masks.push(obj); else obstacles.push(obj);
     }
-    if (x < -10) { o.remove(); obstacles.splice(i, 1); }
-  });
+}
 
-  // تحريك الأقنعة
-  masks.forEach((m, i) => {
-    let x = parseFloat(m.style.left) - speed;
-    m.style.left = x + "vw";
-    
-    // لمس القناع
-    let maskY = parseFloat(m.style.bottom);
-    if (x < 30 && x > 20 && Math.abs((60+y) - maskY) < 40) {
-      score += 500;
-      enemyX -= 50; // الوحش يبتعد
-      m.remove();
-      masks.splice(i, 1);
-    }
-  });
+function animate() {
+    if (isGameOver) return;
+    requestAnimationFrame(animate);
 
-  // حركة الوحش (البكتيريا)
-  enemyX += (speed * 0.12);
-  enemy.style.left = enemyX + "px";
+    // تحريك اللاعب بسلاسة بين المسارات
+    player.position.x = THREE.MathUtils.lerp(player.position.x, playerLane * 3, 0.1);
 
-  if (enemyX > 60) { // إذا لمس الوحش اللاعب
-    endGame("أمسكت بك البكتيريا!");
-  }
+    spawnObstacle();
 
-  score++;
-  speed += 0.002;
-  scoreText.innerText = "SCORE: " + score;
-  
-  spawn();
-  requestAnimationFrame(update);
+    // تحريك العوائق (تأتي من الأمام)
+    obstacles.forEach((o, i) => {
+        o.position.z += speed;
+        o.rotation.y += 0.05;
+        
+        // تصادم
+        if (o.position.z > 7.5 && o.position.z < 8.5 && Math.abs(o.position.x - player.position.x) < 1) {
+            endGame("أصابتك البكتيريا!");
+        }
+        if (o.position.z > 10) { scene.remove(o); obstacles.splice(i, 1); }
+    });
+
+    // تحريك الكمامات (الأقنعة)
+    masks.forEach((m, i) => {
+        m.position.z += speed;
+        m.rotation.z += 0.1;
+        if (m.position.z > 7.5 && m.position.z < 8.5 && Math.abs(m.position.x - player.position.x) < 1) {
+            score += 100;
+            scene.remove(m);
+            masks.splice(i, 1);
+        }
+    });
+
+    score++;
+    speed += 0.0001;
+    document.getElementById("score").innerText = "SCORE: " + score;
+
+    renderer.render(scene, camera);
 }
 
 function endGame(msg) {
-  isGameOver = true;
-  alert(msg + "\nScore: " + score);
-  location.reload();
+    isGameOver = true;
+    alert(msg + "\nScore: " + score);
+    location.reload();
 }
-
-update();
 </script>
 </body>
 </html>
