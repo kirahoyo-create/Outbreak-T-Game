@@ -2,97 +2,125 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>Outbreak Run</title>
+<title>Outbreak Run - الإصدار المصلح</title>
 <style>
-body {
-  margin: 0;
-  overflow: hidden;
-  background: #111;
-  color: white;
-  font-family: Arial;
-}
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
 
-#game {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-}
+  #game {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(to bottom, #1a1a2e 0%, #16213e 100%);
+    border-bottom: 50px solid #333;
+    box-sizing: border-box;
+  }
 
-.player {
-  width: 40px;
-  height: 40px;
-  background: cyan;
-  position: absolute;
-  bottom: 50px;
-  left: 50px;
-}
+  .player {
+    width: 40px;
+    height: 40px;
+    background: cyan;
+    position: absolute;
+    bottom: 50px;
+    left: 150px; /* مسافة أمان من العدو */
+    border-radius: 5px;
+    box-shadow: 0 0 10px cyan;
+  }
 
-.enemy {
-  width: 40px;
-  height: 40px;
-  background: red;
-  position: absolute;
-  bottom: 50px;
-  left: 0;
-}
+  .enemy {
+    width: 45px;
+    height: 45px;
+    background: #ff0055;
+    position: absolute;
+    bottom: 50px;
+    left: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 15px #ff0055;
+  }
 
-.mask {
-  width: 25px;
-  height: 25px;
-  background: lime;
-  position: absolute;
-  bottom: 50px;
-}
+  .mask {
+    width: 25px;
+    height: 25px;
+    background: lime;
+    position: absolute;
+    bottom: 50px;
+    border-radius: 50%;
+  }
 
-.obstacle {
-  width: 30px;
-  height: 40px;
-  background: orange;
-  position: absolute;
-  bottom: 50px;
-}
+  .obstacle {
+    width: 30px;
+    height: 60px;
+    background: #f0a500;
+    position: absolute;
+    bottom: 50px;
+    border-radius: 3px;
+  }
 
-#score {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-}
+  #score {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 24px;
+    font-weight: bold;
+    z-index: 10;
+  }
+
+  .instructions {
+    position: absolute;
+    top: 60px;
+    left: 20px;
+    font-size: 14px;
+    color: #aaa;
+  }
 </style>
 </head>
-
 <body>
 
 <div id="game">
+  <div id="score">Score: 0</div>
+  <div class="instructions">اضغط أي مفتاح للقفز</div>
   <div class="player" id="player"></div>
   <div class="enemy" id="enemy"></div>
-  <div id="score">Score: 0</div>
 </div>
 
 <script>
-let player = document.getElementById("player");
-let enemy = document.getElementById("enemy");
-let scoreText = document.getElementById("score");
+const playerElement = document.getElementById("player");
+const enemyElement = document.getElementById("enemy");
+const scoreText = document.getElementById("score");
+const gameContainer = document.getElementById("game");
 
 let y = 0;
 let velocity = 0;
 let gravity = -0.6;
-let jump = 12;
+let jumpPower = 13;
 
-let speed = 4;
+let speed = 5;
 let score = 0;
+let enemyPos = 10;
 
 let masks = [];
 let obstacles = [];
 
+// التحكم بالقفز
 document.addEventListener("keydown", () => {
-  if (y === 0) velocity = jump;
+  if (y === 0) velocity = jumpPower;
+});
+
+// لمس الشاشة للجوال
+document.addEventListener("touchstart", () => {
+  if (y === 0) velocity = jumpPower;
 });
 
 function createMask() {
   let m = document.createElement("div");
   m.className = "mask";
   m.style.left = "100vw";
-  document.getElementById("game").appendChild(m);
+  gameContainer.appendChild(m);
   masks.push(m);
 }
 
@@ -100,14 +128,16 @@ function createObstacle() {
   let o = document.createElement("div");
   o.className = "obstacle";
   o.style.left = "100vw";
-  document.getElementById("game").appendChild(o);
+  gameContainer.appendChild(o);
   obstacles.push(o);
 }
 
-setInterval(createMask, 3000);
-setInterval(createObstacle, 2000);
+// إنشاء العناصر بشكل متكرر
+setInterval(createMask, 4000);
+setInterval(createObstacle, 2500);
 
 function update() {
+  // حركة الجاذبية للاعب
   velocity += gravity;
   y += velocity;
 
@@ -115,39 +145,64 @@ function update() {
     y = 0;
     velocity = 0;
   }
+  playerElement.style.bottom = (50 + y) + "px";
 
-  player.style.bottom = (50 + y) + "px";
-
+  // حركة الأقنعة (تزيد النقاط وتهدئ الوحش قليلاً)
   masks.forEach((m, i) => {
-    m.style.left = (m.offsetLeft - speed) + "px";
+    let currentLeft = parseFloat(m.style.left);
+    m.style.left = (currentLeft - speed) + "px";
 
-    if (m.offsetLeft < 80 && m.offsetLeft > 40 && y < 50) {
-      speed += 0.5;
+    // تصادم مع القناع
+    if (currentLeft < 190 && currentLeft > 150 && y < 30) {
+      score += 100;
+      enemyPos -= 20; // دفع العدو للخلف
+      m.remove();
+      masks.splice(i, 1);
+    }
+    // حذف العنصر إذا خرج من الشاشة
+    if (currentLeft < -50) {
       m.remove();
       masks.splice(i, 1);
     }
   });
 
+  // حركة العوائق
   obstacles.forEach((o, i) => {
-    o.style.left = (o.offsetLeft - speed) + "px";
+    let currentLeft = parseFloat(o.style.left);
+    o.style.left = (currentLeft - speed) + "px";
 
-    if (o.offsetLeft < 80 && o.offsetLeft > 40 && y < 30) {
-      alert("💀 انتهت اللعبة! Score: " + score);
-      location.reload();
+    // تصادم مع العائق (خسارة)
+    if (currentLeft < 190 && currentLeft > 150 && y < 60) {
+      gameOver("💀 صدمت عائقاً!");
+    }
+
+    if (currentLeft < -50) {
+      o.remove();
+      obstacles.splice(i, 1);
     }
   });
 
-  enemy.style.left = (enemy.offsetLeft + (speed * 0.3)) + "px";
+  // حركة العدو (المطاردة)
+  // العدو يقترب ببطء مع مرور الوقت
+  enemyPos += (speed * 0.15); 
+  enemyElement.style.left = enemyPos + "px";
 
-  if (enemy.offsetLeft > 40) {
-    alert("🧟 الوحش مسكك!");
-    location.reload();
+  // شرط الخسارة: إذا لمس العدو اللاعب
+  if (enemyPos >= (150 - 40)) { 
+    gameOver("🧟 الوحش مسكك!");
   }
 
+  // زيادة النتيجة والصعوبة تدريجياً
   score++;
+  speed += 0.001; 
   scoreText.innerText = "Score: " + score;
 
   requestAnimationFrame(update);
+}
+
+function gameOver(message) {
+  alert(message + "\nScore: " + score);
+  location.reload();
 }
 
 update();
