@@ -1,0 +1,158 @@
+
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>Outbreak Run</title>
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #111;
+  color: white;
+  font-family: Arial;
+}
+
+#game {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.player {
+  width: 40px;
+  height: 40px;
+  background: cyan;
+  position: absolute;
+  bottom: 50px;
+  left: 50px;
+}
+
+.enemy {
+  width: 40px;
+  height: 40px;
+  background: red;
+  position: absolute;
+  bottom: 50px;
+  left: 0;
+}
+
+.mask {
+  width: 25px;
+  height: 25px;
+  background: lime;
+  position: absolute;
+  bottom: 50px;
+}
+
+.obstacle {
+  width: 30px;
+  height: 40px;
+  background: orange;
+  position: absolute;
+  bottom: 50px;
+}
+
+#score {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="game">
+  <div class="player" id="player"></div>
+  <div class="enemy" id="enemy"></div>
+  <div id="score">Score: 0</div>
+</div>
+
+<script>
+let player = document.getElementById("player");
+let enemy = document.getElementById("enemy");
+let scoreText = document.getElementById("score");
+
+let y = 0;
+let velocity = 0;
+let gravity = -0.6;
+let jump = 12;
+
+let speed = 4;
+let score = 0;
+
+let masks = [];
+let obstacles = [];
+
+document.addEventListener("keydown", () => {
+  if (y === 0) velocity = jump;
+});
+
+function createMask() {
+  let m = document.createElement("div");
+  m.className = "mask";
+  m.style.left = "100vw";
+  document.getElementById("game").appendChild(m);
+  masks.push(m);
+}
+
+function createObstacle() {
+  let o = document.createElement("div");
+  o.className = "obstacle";
+  o.style.left = "100vw";
+  document.getElementById("game").appendChild(o);
+  obstacles.push(o);
+}
+
+setInterval(createMask, 3000);
+setInterval(createObstacle, 2000);
+
+function update() {
+  velocity += gravity;
+  y += velocity;
+
+  if (y < 0) {
+    y = 0;
+    velocity = 0;
+  }
+
+  player.style.bottom = (50 + y) + "px";
+
+  masks.forEach((m, i) => {
+    m.style.left = (m.offsetLeft - speed) + "px";
+
+    if (m.offsetLeft < 80 && m.offsetLeft > 40 && y < 50) {
+      speed += 0.5;
+      m.remove();
+      masks.splice(i, 1);
+    }
+  });
+
+  obstacles.forEach((o, i) => {
+    o.style.left = (o.offsetLeft - speed) + "px";
+
+    if (o.offsetLeft < 80 && o.offsetLeft > 40 && y < 30) {
+      alert("💀 انتهت اللعبة! Score: " + score);
+      location.reload();
+    }
+  });
+
+  enemy.style.left = (enemy.offsetLeft + (speed * 0.3)) + "px";
+
+  if (enemy.offsetLeft > 40) {
+    alert("🧟 الوحش مسكك!");
+    location.reload();
+  }
+
+  score++;
+  scoreText.innerText = "Score: " + score;
+
+  requestAnimationFrame(update);
+}
+
+update();
+</script>
+
+</body>
+</html>
